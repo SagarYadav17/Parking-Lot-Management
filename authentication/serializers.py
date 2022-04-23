@@ -3,6 +3,7 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.hashers import make_password
 
 # Models
 from django.contrib.auth.models import User
@@ -45,3 +46,31 @@ class RegisterSerializer(serializers.ModelSerializer):
         Profile.objects.create(user=user)
 
         return user
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Profile
+        exclude = ("user",)
+
+
+class UserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(required=True, validators=[validate_password])
+    profile = ProfileSerializer(read_only=True)
+
+    class Meta:
+        model = User
+        fields = ("id", "username", "email", "password", "profile")
+
+    def update(self, instance, validated_data):
+
+        if validated_data.get("password"):
+            hashed_password = make_password(validated_data["password"])
+            validated_data.update({"password": hashed_password})
+
+        if self.initial_data.get("profile"):
+            profile_serializer = ProfileSerializer(instance.profile, data=self.initial_data.get("profile"))
+            profile_serializer.is_valid(raise_exception=True)
+            profile_serializer.save()
+
+        return super().update(instance, validated_data)
